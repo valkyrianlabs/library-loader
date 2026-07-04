@@ -21,12 +21,75 @@ pub struct CSE {
     formats: Arc<Vec<Format>>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PartProbe {
+    pub part_id: u32,
+    pub status: u16,
+    pub available: bool,
+    pub content_type: Option<String>,
+    pub filename: Option<String>,
+    pub content_length: Option<u64>,
+    pub downloaded_body: bool,
+}
+
 impl CSE {
     pub fn new(token: String, formats: Arc<Vec<Format>>) -> Self {
         CSE {
             auth: token,
             formats,
         }
+    }
+
+    pub fn probe_part_id(&self, part_id: u32) -> error::Result<PartProbe> {
+        let url = format!(
+            "{base}{id}",
+            base = COMPONENT_SEARCH_ENGINE_URL,
+            id = part_id
+        );
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(20))
+            .build()?;
+        let res = client
+            .head(&url)
+            .header(
+                header::AUTHORIZATION,
+                format!("Basic {auth}", auth = &self.auth),
+            )
+            .header(
+                header::USER_AGENT,
+                format!(
+                    "Library Loader {} github.com/olback/library-loader",
+                    env!("CARGO_PKG_VERSION")
+                ),
+            )
+            .send()?;
+
+        if res.status().is_server_error() {
+            return Err(Error::ServerError(res.status().as_u16()));
+        }
+
+        let content_type = res
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let filename = content_disposition_filename(res.headers());
+        let content_length = res
+            .headers()
+            .get(header::CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok());
+
+        Ok(PartProbe {
+            part_id,
+            status: res.status().as_u16(),
+            available: res.status().is_success()
+                && content_type.as_deref().is_some_and(is_zip_content_type),
+            content_type,
+            filename,
+            content_length,
+            downloaded_body: false,
+        })
     }
 
     pub fn get(&self, epw: Epw) -> error::Result<Vec<Result>> {
@@ -65,19 +128,8 @@ impl CSE {
         let mut body = Vec::<u8>::new();
         res.copy_to(&mut body)?;
 
-        let filename = match res.headers().get("content-disposition") {
-            Some(v) => {
-                let content_disposition = String::from_utf8_lossy(v.as_bytes()).to_string();
-                content_disposition
-                    .replace("attachment;", "")
-                    .trim()
-                    .replace("filename=", "")
-                    .replace('"', "")
-                    .trim()
-                    .to_string()
-            }
-            None => String::from("unknown.zip"),
-        };
+        let filename = content_disposition_filename(res.headers())
+            .unwrap_or_else(|| String::from("unknown.zip"));
 
         #[cfg(debug_assertions)]
         {
@@ -152,6 +204,18 @@ impl CSE {
 
         Ok(vec_results)
     }
+}
+
+fn content_disposition_filename(headers: &header::HeaderMap) -> Option<String> {
+    let content_disposition = headers
+        .get(header::CONTENT_DISPOSITION)
+        .map(|value| String::from_utf8_lossy(value.as_bytes()).to_string())?;
+    let filename = content_disposition
+        .split(';')
+        .find_map(|part| part.trim().strip_prefix("filename="))
+        .map(|filename| filename.trim_matches('"').trim().to_owned())?;
+
+    (!filename.is_empty()).then_some(filename)
 }
 
 fn is_zip_content_type(content_type: &str) -> bool {

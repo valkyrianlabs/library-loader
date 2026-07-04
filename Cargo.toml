@@ -3,5 +3,6 @@ resolver = "2"
 members = [
     "ll-core",
     "ll-cli",
+    "ll-mcp",
     "ll-gui"
 ]

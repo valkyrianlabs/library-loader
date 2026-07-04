@@ -1,0 +1,15 @@
+[package]
+name = "library-loader-mcp"
+version = "0.5.0"
+description = "Codex MCP server for Library Loader"
+authors = ["Edwin Svensson <libraryloader@olback.net>"]
+edition = "2021"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+ll-core = { path = "../ll-core", package = "library-loader-core" }
+clap = { version = "4.6", features = [ "derive" ] }
+serde = { version = "1", features = [ "derive" ] }
+serde_json = "1"
+shellexpand = "3"
