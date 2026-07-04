@@ -34,6 +34,10 @@ pub enum Error {
     FileEmpty,
     #[error("Zip archive empty")]
     ZipArchiveEmpty,
+    #[error("Zip entry too large: {0} ({1} bytes)")]
+    ZipEntryTooLarge(String, u64),
+    #[error("Zip archive too large after extraction ({0} bytes)")]
+    ZipArchiveTooLarge(u64),
     #[error("No EPW file in zip archive")]
     NoEpwInZipArchive,
     #[error("ECAD type not found")]

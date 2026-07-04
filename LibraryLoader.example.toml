@@ -6,6 +6,13 @@ recursive = false
 format = "3d"
 output_path = "~/EAGLE/libraries"
 
+[formats.'QuartzPulseLib']
+format = "kicad"
+output_path = "~/Documents/QuartzPulse"
+model_output_path = "~/Documents/QuartzPulse/3dmodels/QuartzPulse.3dshapes"
+model_uri = "${QP_3DMODELS}"
+model_formats = ["stp", "step", "wrl", "stl"]
+
 [formats.'eagle']
 format = "eagle"
 output_path = "~/EAGLE/libraries"

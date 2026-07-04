@@ -11,5 +11,4 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 ll-core = { path = "../ll-core", package = "library-loader-core" }
-# clap = { version = "3.0.0-beta.5", features = [ "yaml" ] }
-clap = { version = "2", features = [ "yaml" ] }
+clap = { version = "4.6", features = [ "derive" ] }

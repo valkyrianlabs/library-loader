@@ -4,6 +4,7 @@ use {
 };
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Epw {
     pub id: u32,
     pub mna: String, // Manufacturer?

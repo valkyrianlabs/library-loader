@@ -1,14 +1,61 @@
 use {
+    clap::{Arg, ArgAction, Command},
     ll_core::{Config, ConsoleLogger, Error, Watcher},
     std::path::PathBuf,
 };
 
 fn main() -> ll_core::Result<()> {
-    let app_yaml = clap::load_yaml!("../cli.yml");
-    let app = clap::App::from(app_yaml)
+    let app = Command::new("Library Loader CLI")
         .about(env!("CARGO_PKG_DESCRIPTION"))
         .author(env!("CARGO_PKG_AUTHORS"))
         .version(env!("CARGO_PKG_VERSION"))
+        .arg(
+            Arg::new("config")
+                .help("Path to config file")
+                .short('c')
+                .long("config")
+                .value_name("config")
+                .conflicts_with("global_config"),
+        )
+        .arg(
+            Arg::new("watch")
+                .help("Path to watch for .epw/.zip files.")
+                .short('w')
+                .long("watch")
+                .value_name("watch")
+                .conflicts_with("generate"),
+        )
+        .arg(
+            Arg::new("download")
+                .help("Download once from an .epw file or a zip containing an .epw file.")
+                .short('d')
+                .long("download")
+                .value_name("epw-or-zip")
+                .conflicts_with("generate"),
+        )
+        .arg(
+            Arg::new("generate")
+                .help("Generate config.")
+                .short('g')
+                .long("generate")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["watch", "download"]),
+        )
+        .arg(
+            Arg::new("overwrite")
+                .help("Overwrite existing files")
+                .long("overwrite")
+                .action(ArgAction::SetTrue)
+                .requires("generate"),
+        )
+        .arg(
+            Arg::new("global_config")
+                .help("Use global config.")
+                .short('u')
+                .long("global-config")
+                .action(ArgAction::SetTrue)
+                .conflicts_with("config"),
+        )
         .get_matches();
 
     #[cfg(not(debug_assertions))]
@@ -28,10 +75,10 @@ fn main() -> ll_core::Result<()> {
         }
     });
 
-    let config_path = match if app.is_present("global_config") {
+    let config_path = match if app.get_flag("global_config") {
         Config::default_path()
     } else {
-        app.value_of("config")
+        app.get_one::<String>("config")
             .map(PathBuf::from)
             .or(Config::get_path()?)
     } {
@@ -46,8 +93,8 @@ fn main() -> ll_core::Result<()> {
         }
     };
 
-    if app.is_present("generate") {
-        if config_path.exists() && !app.is_present("overwrite") {
+    if app.get_flag("generate") {
+        if config_path.exists() && !app.get_flag("overwrite") {
             eprintln!("File {:?} already exists, quitting...", config_path);
             return Err(Error::WouldOverwrite);
         } else {
@@ -61,7 +108,7 @@ fn main() -> ll_core::Result<()> {
     println!("Using config at {:?}", config_path);
     let mut config = Config::read(Some(config_path.clone()))?;
 
-    if let Some(watch_path) = app.value_of("watch") {
+    if let Some(watch_path) = app.get_one::<String>("watch") {
         config.settings.watch_path = watch_path.into();
     }
 
@@ -75,6 +122,13 @@ fn main() -> ll_core::Result<()> {
         eprintln!("No formats specified in config.");
         eprintln!("This is not an error but the program is useless");
         eprintln!("without any formats specified.");
+    }
+
+    if let Some(download_path) = app.get_one::<String>("download") {
+        for save_path in ll_core::download_once(&config, download_path)? {
+            println!("Saved to {:?}", save_path);
+        }
+        return Ok(());
     }
 
     let mut watcher = Watcher::new(config, vec![ConsoleLogger::new()])?;

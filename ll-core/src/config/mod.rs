@@ -15,6 +15,14 @@ pub mod profile;
 pub struct Format {
     pub format: ECAD,
     pub output_path: String,
+    #[serde(default)]
+    pub model_output_path: Option<String>,
+    #[serde(default)]
+    pub model_uri: Option<String>,
+    #[serde(default)]
+    pub model_formats: Vec<String>,
+    #[serde(default)]
+    pub create_folder: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -51,11 +59,41 @@ impl Config {
     pub(crate) fn formats(&self) -> Result<Vec<format::Format>> {
         let mut formats_vec = Vec::with_capacity(self.formats.len());
         for (name, f) in &self.formats {
-            formats_vec.push(format::Format::from_ecad(
+            let mut format = format::Format::from_ecad(
                 name,
                 f.format.clone(),
                 PathBuf::from(shellexpand::full(&f.output_path)?.as_ref()),
-            ))
+            );
+
+            if let Some(model_output_path) = &f.model_output_path {
+                format.model_output_path = Some(PathBuf::from(
+                    shellexpand::full(model_output_path)?.as_ref(),
+                ));
+            }
+
+            if let Some(model_uri) = &f.model_uri {
+                let trimmed = model_uri.trim();
+                if !trimmed.is_empty() {
+                    format.model_uri = Some(trimmed.to_owned());
+                }
+            }
+
+            if !f.model_formats.is_empty() {
+                format.model_extensions = f
+                    .model_formats
+                    .iter()
+                    .filter_map(|ext| {
+                        let ext = ext.trim().trim_start_matches('.').to_ascii_lowercase();
+                        (!ext.is_empty()).then_some(ext)
+                    })
+                    .collect();
+            }
+
+            if let Some(create_folder) = f.create_folder {
+                format.create_folder = create_folder;
+            }
+
+            formats_vec.push(format)
         }
         Ok(formats_vec)
     }

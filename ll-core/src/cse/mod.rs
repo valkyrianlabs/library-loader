@@ -6,11 +6,14 @@ use {
         format::{Files, Format, ECAD},
     },
     reqwest::header,
-    std::{path::PathBuf, sync::Arc},
+    std::{path::PathBuf, sync::Arc, time::Duration},
 };
 
 mod result;
 pub use result::Result;
+
+const MAX_ZIP_ENTRY_BYTES: u64 = 64 * 1024 * 1024;
+const MAX_ZIP_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct CSE {
@@ -30,7 +33,9 @@ impl CSE {
         let id = epw.id;
         let url = format!("{base}{id}", base = COMPONENT_SEARCH_ENGINE_URL, id = id);
 
-        let client = reqwest::blocking::Client::new();
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(60))
+            .build()?;
         let req = client
             .get(&url)
             .header(
@@ -53,7 +58,7 @@ impl CSE {
 
         if !res.status().is_success() {
             return Err(Error::ServerError(res.status().as_u16()));
-        } else if res_header != "application/x-zip" {
+        } else if !is_zip_content_type(res_header) {
             return Err(Error::Other("Error downloading file: Could not determine content type. This may be because the terms have changed. Log in at componentsearchengine.com and accept the new terms."));
         }
 
@@ -83,7 +88,6 @@ impl CSE {
             );
             println!("URL: {}", url);
             println!("Status: {}", res.status());
-            println!("Headers {:#?}", res.headers());
             println!("Body length: {}", body.len());
             println!("Filename: {}", filename);
             println!(
@@ -112,8 +116,9 @@ impl CSE {
                     true => zip_filename.as_str()[4..].replace(".zip", ""),
                     false => zip_filename.replace(".zip", ""),
                 };
-                let reader = std::io::Cursor::new(&data);
+                let reader = std::io::Cursor::new(data.as_slice());
                 let mut archive = zip::ZipArchive::new(reader)?;
+                validate_archive(&mut archive)?;
                 let files = format.extract(&mut archive)?;
 
                 let output_path = match format.create_folder {
@@ -147,4 +152,43 @@ impl CSE {
 
         Ok(vec_results)
     }
+}
+
+fn is_zip_content_type(content_type: &str) -> bool {
+    let content_type = content_type
+        .split(';')
+        .next()
+        .unwrap_or(content_type)
+        .trim()
+        .to_ascii_lowercase();
+
+    matches!(
+        content_type.as_str(),
+        "application/zip" | "application/x-zip" | "application/x-zip-compressed"
+    )
+}
+
+fn validate_archive<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+) -> error::Result<()> {
+    let mut total_size = 0u64;
+
+    for i in 0..archive.len() {
+        let item = archive.by_index(i)?;
+        if item.is_dir() {
+            continue;
+        }
+
+        let size = item.size();
+        if size > MAX_ZIP_ENTRY_BYTES {
+            return Err(Error::ZipEntryTooLarge(item.name().to_owned(), size));
+        }
+
+        total_size = total_size.saturating_add(size);
+        if total_size > MAX_ZIP_TOTAL_BYTES {
+            return Err(Error::ZipArchiveTooLarge(total_size));
+        }
+    }
+
+    Ok(())
 }

@@ -65,6 +65,9 @@ pub struct Format {
     pub name: String,
     pub ecad: ECAD,
     pub create_folder: bool,
+    pub model_output_path: Option<PathBuf>,
+    pub model_uri: Option<String>,
+    pub model_extensions: Vec<String>,
     match_path: &'static str,
     ignore: Vec<&'static str>,
 }
@@ -77,6 +80,14 @@ impl Format {
             name: (*name).clone(),
             ecad,
             create_folder: false,
+            model_output_path: None,
+            model_uri: None,
+            model_extensions: vec![
+                "stp".to_owned(),
+                "step".to_owned(),
+                "wrl".to_owned(),
+                "stl".to_owned(),
+            ],
             match_path: "",
             ignore: vec![],
         };
@@ -110,7 +121,7 @@ impl Format {
 
     pub fn extract(
         &self,
-        archive: &mut zip::ZipArchive<Cursor<&Vec<u8>>>,
+        archive: &mut zip::ZipArchive<Cursor<&[u8]>>,
     ) -> Result<HashMap<String, Vec<u8>>> {
         Ok(match &self.ecad {
             // * Keep these in alphabetical order

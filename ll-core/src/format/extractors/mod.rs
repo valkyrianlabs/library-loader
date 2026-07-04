@@ -8,14 +8,19 @@ pub(super) use {
 };
 
 pub type Files = HashMap<String, Vec<u8>>;
+pub const MAX_EXTRACTED_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
 pub(super) fn generic_extractor(
     format: &Format,
-    archive: &mut zip::ZipArchive<Cursor<&Vec<u8>>>,
+    archive: &mut zip::ZipArchive<Cursor<&[u8]>>,
 ) -> Result<HashMap<String, Vec<u8>>> {
     let mut files = Files::new();
     'file_loop: for i in 0..archive.len() {
         let mut item = archive.by_index(i)?;
+        if item.is_dir() {
+            continue;
+        }
+
         let file_path = item.name().to_string();
         let file_path_lower = file_path.to_lowercase();
 
@@ -28,9 +33,20 @@ pub(super) fn generic_extractor(
 
         if file_path_lower.contains(&format.match_path.to_lowercase()) {
             let path = PathBuf::from(file_path);
-            let base_name = path.file_name().unwrap().to_string_lossy().to_string();
+            let Some(base_name) = path.file_name() else {
+                continue;
+            };
+            let base_name = base_name.to_string_lossy().to_string();
             let mut f_data = Vec::<u8>::new();
-            item.read_to_end(&mut f_data)?;
+            item.by_ref()
+                .take(MAX_EXTRACTED_FILE_BYTES + 1)
+                .read_to_end(&mut f_data)?;
+            if f_data.len() as u64 > MAX_EXTRACTED_FILE_BYTES {
+                return Err(crate::error::Error::ZipEntryTooLarge(
+                    base_name,
+                    f_data.len() as u64,
+                ));
+            }
             files.insert(base_name, f_data);
         }
     }

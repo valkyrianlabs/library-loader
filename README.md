@@ -73,6 +73,28 @@ or CLI:
 cargo run --bin library-loader-cli
 ```
 
+### One-shot imports and KiCad 3D models
+
+The CLI can process one downloaded `.epw` file, or a distributor zip containing
+an `.epw`, without starting watch mode:
+
+```shell
+cargo run --bin library-loader-cli -- --config LibraryLoader.toml --download path/to/model.epw
+```
+
+For KiCad libraries, `model_output_path` and `model_uri` can be used to keep 3D
+models in a project-level `.3dshapes` directory while rewriting footprint model
+references to a KiCad environment variable:
+
+```toml
+[formats.'QuartzPulseLib']
+format = "kicad"
+output_path = "~/Documents/QuartzPulse"
+model_output_path = "~/Documents/QuartzPulse/3dmodels/QuartzPulse.3dshapes"
+model_uri = "${QP_3DMODELS}"
+model_formats = ["stp", "step", "wrl", "stl"]
+```
+
 ## What/Why?
 
 This is an implementation of [https://www.samacsys.com/library-loader/](https://www.samacsys.com/library-loader/) in Rust. Why? Well, since the library-loader SamacSys provides only works on Windows, I thought it would be neat to make something similar but available to everyone.

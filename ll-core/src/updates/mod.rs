@@ -23,7 +23,7 @@ pub struct UpdateInfo<'l, 'u> {
     pub url: &'u str,
 }
 
-pub fn check(local_version: &str, kind: ClientKind) -> Result<Option<UpdateInfo>> {
+pub fn check(local_version: &str, kind: ClientKind) -> Result<Option<UpdateInfo<'_, '_>>> {
     let url = format!(
         "https://raw.githubusercontent.com/olback/library-loader/master/{kind}/Cargo.toml",
         kind = kind
